@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "facesort"
+version = "0.1.0"
+description = "Phân loại ảnh cưới theo khuôn mặt, chạy hoàn toàn trên máy."
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12",
+    "Pillow>=10.0",
+    "pillow-heif>=0.16",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+ml = [
+    "insightface>=0.7.3",
+    "onnxruntime>=1.17",
+    "scikit-learn>=1.4",
+]
+ui = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
+drive = [
+    "google-api-python-client>=2.120",
+    "google-auth-oauthlib>=1.2",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+facesort = "facesort.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["facesort*"]
+
+[tool.setuptools.package-data]
+facesort = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
