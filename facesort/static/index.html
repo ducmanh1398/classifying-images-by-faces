@@ -1,1 +1,23 @@
-<!doctype html><meta charset="utf-8"><title>facesort</title><h1>facesort</h1>
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>facesort</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#/">facesort</a>
+    <span id="projectName" class="muted"></span>
+    <span class="spacer"></span>
+    <select id="projectSelect" hidden aria-label="Chọn dự án"></select>
+    <span id="topProgress" class="muted"></span>
+  </header>
+  <main id="app" aria-live="polite"></main>
+  <div id="toasts" role="status"></div>
+  <div id="modal" class="overlay" hidden></div>
+  <noscript>Cần bật JavaScript để dùng giao diện này.</noscript>
+  <script src="/static/app.js"></script>
+</body>
+</html>

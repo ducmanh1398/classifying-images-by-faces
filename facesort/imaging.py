@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from PIL import Image, ImageOps
@@ -10,6 +11,7 @@ FACE_THUMB_SIZE = 160
 FACE_MARGIN = 0.30
 PREVIEW_SIZE = 1280
 
+log = logging.getLogger("facesort.imaging")
 _heif_registered = False
 
 
@@ -35,7 +37,8 @@ def load_image(path: Path | str) -> Image.Image:
             im = ImageOps.exif_transpose(im)
             return im.convert("RGB")
     except Exception as e:  # Pillow ném nhiều loại lỗi khác nhau
-        raise ImageError(f"{Path(path).name}: {e}") from e
+        log.warning("Không đọc được %s: %s", path, e)
+        raise ImageError("File ảnh hỏng hoặc không đọc được.") from e
 
 
 def crop_face(img: Image.Image, x: float, y: float, w: float, h: float) -> Image.Image:
