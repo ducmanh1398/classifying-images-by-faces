@@ -23,13 +23,13 @@ def tiny_png(seed: int) -> bytes:
 
 
 class World:
-    def __init__(self, tmp_path: Path):
+    def __init__(self, tmp_path: Path, db_path: Path | None = None):
         self.root = tmp_path
         self.input_dir = tmp_path / "Ảnh cưới gốc"
         self.output_dir = tmp_path / "Đầu ra"
-        self.input_dir.mkdir()
+        self.input_dir.mkdir(exist_ok=True)
         self.config = Config(input_dir=str(self.input_dir), output_dir=str(self.output_dir))
-        self.conn = db.connect(tmp_path / "test.db")
+        self.conn = db.connect(db_path or tmp_path / "test.db")
         db.set_meta(self.conn, "scan_id", "1")
         self.conn.commit()
 

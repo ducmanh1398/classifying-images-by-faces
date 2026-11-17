@@ -147,6 +147,62 @@ def contact_sheet(project: ProjectOpt = None) -> None:
     typer.echo(f"Đã tạo {out}")
 
 
+@app.command()
+def ui(
+    port: Annotated[int, typer.Option("--port", help="Cổng bắt đầu dò tìm.")] = 8765,
+    project: ProjectOpt = None,
+    no_browser: Annotated[
+        bool, typer.Option("--no-browser", help="Không tự mở trình duyệt.")
+    ] = False,
+) -> None:
+    """Mở giao diện web tại 127.0.0.1 (chỉ máy này truy cập được)."""
+    import threading
+    import webbrowser
+
+    import uvicorn
+
+    from .server import create_app, find_free_port
+
+    application = create_app(project)
+    real_port = find_free_port(port)
+    url = f"http://127.0.0.1:{real_port}"
+    typer.echo(f"Giao diện đang chạy tại {url}  (nhấn Ctrl+C để thoát)")
+    if not no_browser:
+        threading.Timer(1.0, webbrowser.open, args=[url]).start()
+    uvicorn.run(application, host="127.0.0.1", port=real_port, log_level="warning")
+
+
+@app.command()
+def run(project: ProjectOpt = None) -> None:
+    """Quét, phát hiện mặt, gom cụm (gán tăng dần), rồi mở giao diện."""
+    from .detect import InsightFaceEngine
+    from .pipeline import scan_all
+
+    proj, cfg = _open(project)
+    with proj.lock():
+        conn = db.connect(proj.db_path)
+        try:
+            state = {"step": ""}
+
+            def progress(step: str, i: int, total: int) -> None:
+                if step != state["step"]:
+                    state["step"] = step
+                    typer.echo(f"[{step}]")
+
+            r = scan_all(
+                conn, cfg, proj.dir / "thumbs" / "faces",
+                lambda: InsightFaceEngine(cfg.det_size), progress,
+            )
+        finally:
+            conn.close()
+    cl = r.cluster
+    typer.echo(
+        f"Xong: {r.scan.unique_photos} ảnh, {r.detect.faces} mặt mới, "
+        f"{cl.clusters if cl else 0} nhóm, tự gán {cl.assigned if cl else 0} mặt."
+    )
+    ui(project=project)
+
+
 def _fmt_bytes(n: int) -> str:
     size = float(n)
     for unit in ("B", "KB", "MB", "GB"):
