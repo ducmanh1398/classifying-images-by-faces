@@ -89,6 +89,46 @@ def status(project: ProjectOpt = None) -> None:
         typer.echo(f"  {row['canonical_path']}: {row['error']}")
 
 
+def _fmt_bytes(n: int) -> str:
+    size = float(n)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024:
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"
+
+
+@app.command()
+def export(
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Chỉ in bản xem trước.")] = False,
+    project: ProjectOpt = None,
+) -> None:
+    """Xuất ảnh vào thư mục theo nhãn."""
+    from .export import run_export
+
+    proj, cfg = _open(project)
+    with proj.lock():
+        conn = db.connect(proj.db_path)
+        try:
+            preview, rows = run_export(conn, cfg, dry_run=dry_run)
+        finally:
+            conn.close()
+    typer.echo("Bản xem trước:" if dry_run else "Đã xuất:")
+    for folder, n in preview.per_folder.items():
+        typer.echo(f"  {folder}: {n} ảnh")
+    typer.echo(f"Tổng số file sẽ copy: {preview.total_files}")
+    typer.echo(f"Tổng dung lượng:      {_fmt_bytes(preview.total_bytes)}")
+    typer.echo(f"File trùng bỏ qua:    {preview.skipped_existing + preview.duplicate_source_files}")
+    for path, err in preview.error_photos:
+        typer.echo(f"  Ảnh lỗi: {path}: {err}")
+    if not dry_run:
+        errors = [r for r in rows if r.status == "error"]
+        typer.echo(f"Đã copy: {sum(r.status == 'copied' for r in rows)}, lỗi: {len(errors)}")
+        for r in errors:
+            typer.echo(f"  Lỗi {r.folder}/{r.dest_name}: {r.message}", err=True)
+        typer.echo(f"Báo cáo: {cfg.output_dir}\\export_report.csv")
+
+
 def main() -> None:
     setup_console()
     try:
