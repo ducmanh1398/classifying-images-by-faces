@@ -12,3 +12,15 @@
 - **Khóa tiến trình** dùng khóa file của hệ điều hành (`msvcrt.locking`), tự nhả khi tiến trình chết; không dùng `os.kill(pid, 0)` vì trên Windows nó có thể kết thúc tiến trình.
 - **`--prune`** và các tùy chọn của giai đoạn 5 chưa có; `export` hiện chỉ có `--dry-run`.
 - Thiếu `ml`/`ui` trong phụ thuộc mặc định: `insightface`, `onnxruntime`, `scikit-learn` nằm nhóm `ml`; `fastapi`, `uvicorn` nằm nhóm `ui`. Sẽ gộp lại khi đóng gói (giai đoạn 6).
+
+## 2026-11-17 — 3.1 kiểm chứng cài InsightFace
+
+- **Quyết định: dùng gói `insightface`**, không cần nạp ONNX trực tiếp.
+- Môi trường: Windows 11, Python 3.11.9, venv mới. Lệnh đã chạy được, không cần Microsoft C++ Build Tools (có sẵn wheel):
+  `pip install insightface onnxruntime scikit-learn` → insightface 2.1, onnxruntime 1.32.0, scikit-learn 1.9.1, opencv-python 5.0.0.93.
+- `FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"], allowed_modules=["detection","recognition"])` rồi `prepare(ctx_id=-1, det_size=(960,960))`. Model tự tải về `~/.insightface/models` lần đầu (~280 MB, mất ~45 giây).
+- Thử trên ảnh mẫu `t1` của insightface (1280x886): tìm 6 mặt, 0,89 giây/ảnh trên CPU (ảnh đầu, đã gồm khởi động), embedding 512 chiều, độ dài L2 = 1,0.
+- Chỉ nạp `detection` + `recognition` để bỏ qua các model landmark/giới tính-tuổi không cần, chạy nhanh hơn.
+- `insightface.get()` nhận ảnh BGR (ndarray); `detect.py` phải đổi từ RGB của Pillow sang BGR.
+- Cảnh báo `FutureWarning` từ scikit-image (`estimate` deprecated) vô hại; có thể lọc bằng `warnings.filterwarnings`.
+- Tốc độ thật trên 100 ảnh gốc sẽ đo ở task 3.8.
