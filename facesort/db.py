@@ -72,8 +72,19 @@ CREATE TABLE meta (
 );
 """
 
+# v2: cờ "đã tách khỏi cụm" (không tự gán lại) và nhật ký thao tác gắn nhãn để hoàn tác
+SCHEMA_V2 = """
+ALTER TABLE faces ADD COLUMN detached INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE ops_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+"""
+
 # phiên bản -> script SQL nâng cấp lên phiên bản đó
-MIGRATIONS: dict[int, str] = {1: SCHEMA_V1}
+MIGRATIONS: dict[int, str] = {1: SCHEMA_V1, 2: SCHEMA_V2}
 LATEST = max(MIGRATIONS)
 
 

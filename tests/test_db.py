@@ -19,7 +19,7 @@ def test_reopen_existing(tmp_path):
     db.connect(p).close()
     conn = db.connect(p)
     assert db.current_version(conn) == db.LATEST
-    assert conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == 1
+    assert conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == len(db.MIGRATIONS)
 
 
 def test_migration_from_zero_to_one(tmp_path):
@@ -36,3 +36,18 @@ def test_meta(tmp_path):
     db.set_meta(conn, "k", "1")
     db.set_meta(conn, "k", "2")
     assert db.get_meta(conn, "k") == "2"
+
+
+def test_migration_v1_to_v2_keeps_data(tmp_path):
+    conn = sqlite3.connect(tmp_path / "z.db")
+    conn.row_factory = sqlite3.Row
+    db.migrate(conn, 1)
+    conn.execute("INSERT INTO photos (sha256, canonical_path) VALUES ('a', 'a.jpg')")
+    conn.execute(
+        "INSERT INTO faces (photo_sha256,x,y,w,h,det_score) VALUES ('a',0,0,1,1,.9)"
+    )
+    conn.commit()
+    db.migrate(conn)
+    assert db.current_version(conn) == 2
+    assert conn.execute("SELECT detached FROM faces").fetchone()[0] == 0
+    assert "ops_log" in tables(conn)

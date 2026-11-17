@@ -2,10 +2,9 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from facesort.cluster import cluster_first_run
+from facesort.cluster import cluster_run as cluster_first_run
 from facesort.config import Config
 from facesort.detect import compute_quality, run_detect
-from facesort.errors import FacesortError
 from tests.factories import World
 from tests.fakes import FakeFaceEngine, det, unit
 
@@ -128,18 +127,6 @@ def test_cluster_rerun_resets_when_no_labels(tmp_path):
     cluster_first_run(w.conn, w.config)
     cluster_first_run(w.conn, w.config)
     assert w.conn.execute("SELECT COUNT(*) FROM clusters").fetchone()[0] == 2
-
-
-def test_cluster_refuses_when_labels_exist(tmp_path):
-    w = World(tmp_path)
-    _add_points(w, _centers(2))
-    cluster_first_run(w.conn, w.config)
-    cid = w.conn.execute("SELECT id FROM clusters").fetchone()[0]
-    w.conn.execute("UPDATE clusters SET label_id=?", (w.label("A"),))
-    w.conn.commit()
-    assert cid
-    with pytest.raises(FacesortError):
-        cluster_first_run(w.conn, w.config)
 
 
 def test_dbscan_matches_expected_noise_and_border():

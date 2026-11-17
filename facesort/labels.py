@@ -81,7 +81,9 @@ def merge_labels(conn: sqlite3.Connection, src_id: int, dst_id: int) -> None:
         return
     conn.execute("UPDATE clusters SET label_id=? WHERE label_id=?", (dst_id, src_id))
     conn.execute("UPDATE faces SET label_id=? WHERE label_id=?", (dst_id, src_id))
-    conn.execute("DELETE FROM exports WHERE label_id=?", (src_id,))
+    # chuyển sổ xuất sang nhãn đích; dòng trùng SHA-256 ở lại (nhãn mồ côi) để
+    # export dọn bản copy thừa trên đĩa
+    conn.execute("UPDATE OR IGNORE exports SET label_id=? WHERE label_id=?", (dst_id, src_id))
     conn.execute("DELETE FROM labels WHERE id=?", (src_id,))
     conn.commit()
 

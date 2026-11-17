@@ -77,6 +77,7 @@ class DetectSummary:
     done: int = 0
     errors: int = 0
     faces: int = 0
+    cancelled: bool = False
 
 
 def run_detect(
@@ -85,6 +86,7 @@ def run_detect(
     engine: FaceEngine,
     thumbs_dir: Path,
     progress: Callable[[int, int], None] | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> DetectSummary:
     input_dir = Path(config.input_dir)
     scan_id = db.current_scan_id(conn)
@@ -98,6 +100,9 @@ def run_detect(
     summary = DetectSummary()
     total = len(pending)
     for i, row in enumerate(pending, 1):
+        if should_stop and should_stop():
+            summary.cancelled = True
+            break
         sha, rel = row["sha256"], row["canonical_path"]
         try:
             img = load_image(input_dir / rel)
