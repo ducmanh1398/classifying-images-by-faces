@@ -220,11 +220,14 @@ def execute_plan(
     config: Config,
     plan: Plan,
     progress: Callable[[int, int], None] | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> list[ReportRow]:
     input_dir, output_dir = Path(config.input_dir), Path(config.output_dir)
     rows = [ReportRow(f, n, n, s, "skipped_duplicate") for f, s, n in plan.skipped]
     total = len(plan.actions)
     for i, act in enumerate(plan.actions, 1):
+        if should_stop and should_stop():
+            break
         src = input_dir / act.src_rel
         dest = dest_path(output_dir, act.folder, act.name)
         tmp = dest.with_name(dest.name + ".part")
@@ -335,6 +338,7 @@ def run_export(
     output_dir = Path(config.output_dir)
     if not dry_run:
         cleanup_part_files(output_dir)
+        reconcile_exports(conn, config)
     plan = make_plan(conn, config)
     preview = build_preview(conn, plan)
     if dry_run:
@@ -342,3 +346,119 @@ def run_export(
     rows = execute_plan(conn, config, plan, progress)
     write_report(output_dir, rows)
     return preview, rows
+
+
+# ---------------------------------------------------------------- đổi tên / gộp nhãn, dung lượng
+
+
+@dataclass
+class ReconcileResult:
+    moved: int = 0
+    removed_duplicates: int = 0
+    skipped: int = 0
+
+
+def _same_file(path: Path, size: int, mtime_ns: int) -> bool:
+    try:
+        st = path.stat()
+    except OSError:
+        return False
+    return st.st_size == size and st.st_mtime_ns == mtime_ns
+
+
+def reconcile_exports(conn: sqlite3.Connection, config: Config) -> ReconcileResult:
+    """Đưa file đã xuất về đúng thư mục khi nhãn bị đổi tên hoặc gộp (UI_PLAN 1.5).
+
+    Chỉ đụng file có trong sổ `exports` mà kích thước và mtime còn khớp. File do
+    người dùng tự chép vào không bao giờ bị di chuyển hay xóa.
+    """
+    output_dir = Path(config.output_dir)
+    res = ReconcileResult()
+    if not output_dir.is_dir():
+        return res
+    label_folder = {
+        r["id"]: r["folder_name"] for r in conn.execute("SELECT id, folder_name FROM labels")
+    }
+    rows = conn.execute(
+        "SELECT label_id, sha256, dest_rel_path, size, mtime_ns FROM exports ORDER BY label_id"
+    ).fetchall()
+    old_dirs: set[Path] = set()
+    for r in rows:
+        folder, _, name = r["dest_rel_path"].partition("/")
+        if r["label_id"] == UNLABELED_ID:
+            continue
+        src = output_dir / folder / name
+        orphan = r["label_id"] not in label_folder
+        if not orphan and label_folder[r["label_id"]] == folder:
+            continue
+        if not _same_file(src, r["size"], r["mtime_ns"]):
+            # file đã mất hoặc bị sửa tay: bỏ dòng sổ nếu mất, còn lại thì để yên
+            if not src.exists():
+                conn.execute(
+                    "DELETE FROM exports WHERE label_id=? AND sha256=?",
+                    (r["label_id"], r["sha256"]),
+                )
+            else:
+                res.skipped += 1
+            continue
+        old_dirs.add(src.parent)
+        if orphan:  # nhãn đã gộp mất; bản đích đã có cùng SHA-256 → xóa bản thừa
+            os.remove(long_path(src))
+            conn.execute(
+                "DELETE FROM exports WHERE label_id=? AND sha256=?", (r["label_id"], r["sha256"])
+            )
+            res.removed_duplicates += 1
+            continue
+        new_folder = label_folder[r["label_id"]]
+        dest_dir = output_dir / new_folder
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / name
+        if dest.exists() and dest != src and dest.resolve() != src.resolve():
+            taken = {p.name.casefold() for p in dest_dir.iterdir()}
+            stem, dot, ext = name.rpartition(".")
+            stem, ext = (stem, dot + ext) if dot else (name, "")
+            n = 8
+            while f"{stem}__{r['sha256'][:n]}{ext}".casefold() in taken:
+                n += 1
+            dest = dest_dir / f"{stem}__{r['sha256'][:n]}{ext}"
+        os.replace(long_path(src), long_path(dest))
+        conn.execute(
+            "UPDATE exports SET dest_rel_path=? WHERE label_id=? AND sha256=?",
+            (f"{new_folder}/{dest.name}", r["label_id"], r["sha256"]),
+        )
+        res.moved += 1
+    conn.commit()
+    for d in old_dirs:
+        try:
+            d.rmdir()  # chỉ xóa nếu rỗng
+        except OSError:
+            pass
+    return res
+
+
+def existing_ancestor(path: Path) -> Path:
+    p = path.absolute()
+    while not p.exists() and p.parent != p:
+        p = p.parent
+    return p
+
+
+def ensure_disk_space(
+    output_dir: Path,
+    needed: int,
+    free_fn: Callable[[Path], int] | None = None,
+    reserve: int = 64 * 1024 * 1024,
+) -> None:
+    """Dừng với thông báo rõ ràng nếu ổ đầu ra không đủ chỗ (UI_PLAN 1.6)."""
+    from .errors import FacesortError
+
+    free = (
+        free_fn(output_dir)
+        if free_fn
+        else shutil.disk_usage(existing_ancestor(output_dir)).free
+    )
+    if needed + reserve > free:
+        raise FacesortError(
+            f"Ổ đĩa đầu ra không đủ chỗ: cần khoảng {needed / 1e9:.2f} GB, "
+            f"còn trống {free / 1e9:.2f} GB. Hãy giải phóng dung lượng hoặc chọn folder khác."
+        )
