@@ -89,6 +89,64 @@ def status(project: ProjectOpt = None) -> None:
         typer.echo(f"  {row['canonical_path']}: {row['error']}")
 
 
+@app.command()
+def detect(project: ProjectOpt = None) -> None:
+    """Bước 2: phát hiện mặt và tạo embedding."""
+    from .detect import InsightFaceEngine, run_detect
+
+    proj, cfg = _open(project)
+    with proj.lock():
+        conn = db.connect(proj.db_path)
+        try:
+            typer.echo("Đang nạp model (lần đầu sẽ tải về, có thể mất vài phút)...")
+            engine = InsightFaceEngine(cfg.det_size)
+            with typer.progressbar(length=1, label="Phát hiện mặt") as bar:
+                state = {"n": 0}
+
+                def progress(i: int, total: int) -> None:
+                    bar.length = max(total, 1)
+                    bar.update(i - state["n"])
+                    state["n"] = i
+
+                s = run_detect(conn, cfg, engine, proj.dir / "thumbs" / "faces", progress)
+        finally:
+            conn.close()
+    typer.echo(f"Đã xử lý {s.done} ảnh, {s.faces} mặt, {s.errors} ảnh lỗi.")
+
+
+@app.command()
+def cluster(project: ProjectOpt = None) -> None:
+    """Bước 3: gom cụm khuôn mặt."""
+    from .cluster import cluster_first_run
+
+    proj, cfg = _open(project)
+    with proj.lock():
+        conn = db.connect(proj.db_path)
+        try:
+            s = cluster_first_run(conn, cfg)
+        finally:
+            conn.close()
+    typer.echo(f"{s.clusters} cụm ({s.clustered_faces} mặt), {s.noise_faces} mặt lẻ.")
+
+
+debug_app = typer.Typer(help="Công cụ gỡ lỗi.")
+app.add_typer(debug_app, name="debug")
+
+
+@debug_app.command("contact-sheet")
+def contact_sheet(project: ProjectOpt = None) -> None:
+    """Xuất trang HTML tĩnh để xem các cụm."""
+    from .debug import build_contact_sheet
+
+    proj, _ = _open(project)
+    conn = db.connect(proj.db_path)
+    try:
+        out = build_contact_sheet(conn, proj.dir)
+    finally:
+        conn.close()
+    typer.echo(f"Đã tạo {out}")
+
+
 def _fmt_bytes(n: int) -> str:
     size = float(n)
     for unit in ("B", "KB", "MB", "GB"):

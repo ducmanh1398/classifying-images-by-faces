@@ -24,3 +24,10 @@
 - `insightface.get()` nhận ảnh BGR (ndarray); `detect.py` phải đổi từ RGB của Pillow sang BGR.
 - Cảnh báo `FutureWarning` từ scikit-image (`estimate` deprecated) vô hại; có thể lọc bằng `warnings.filterwarnings`.
 - Tốc độ thật trên 100 ảnh gốc sẽ đo ở task 3.8.
+
+## 2026-11-17 — giai đoạn 3 (3.2–3.7)
+
+- **Bỏ scikit-learn, tự viết DBSCAN bằng numpy** (`cluster.dbscan_cosine`). Lý do: trên máy này chính sách Application Control của Windows chặn `sklearn\svm\_libsvm_sparse` ("DLL load failed ... blocked"), nên `from sklearn.cluster import DBSCAN` lỗi. Không vượt chính sách; đặc tả mục 11 cho phép đổi thư viện. Cùng ngữ nghĩa DBSCAN (eps tính cả bằng, `min_samples` tính cả điểm đó), tính ma trận khoảng cách theo khối 2048 hàng. `scikit-learn` bỏ khỏi nhóm `ml` trong `pyproject.toml`. (scipy, onnxruntime, insightface nạp bình thường.)
+- **`detect` chỉ xử lý ảnh còn file sống** và đọc theo đường dẫn sống nhỏ nhất; ảnh `error` được thử lại ở lần sau. Nếu không, ảnh cũ đã bị thay nội dung sẽ bị đọc nhầm file mới.
+- **`cluster` hiện chỉ chạy lần đầu**: nếu đã có nhãn hoặc mặt/cụm bị bỏ qua thì từ chối, vì gán tăng dần thuộc 5.3.
+- Thử thật qua CLI (`scan`, `detect`, `cluster`, `debug contact-sheet`) trên ảnh mẫu insightface thu nhỏ 4 cỡ: 24 mặt, 6 cụm × 4 mặt, 0 mặt lẻ, 0 lỗi.
