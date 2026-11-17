@@ -12,16 +12,14 @@ dependencies = [
     "Pillow>=10.0",
     "pillow-heif>=0.16",
     "numpy>=1.26",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
 ]
 
 [project.optional-dependencies]
 ml = [
     "insightface>=0.7.3",
     "onnxruntime>=1.17",
-]
-ui = [
-    "fastapi>=0.110",
-    "uvicorn>=0.29",
 ]
 drive = [
     "google-api-python-client>=2.120",

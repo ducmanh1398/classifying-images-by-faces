@@ -31,3 +31,16 @@
 - **`detect` chỉ xử lý ảnh còn file sống** và đọc theo đường dẫn sống nhỏ nhất; ảnh `error` được thử lại ở lần sau. Nếu không, ảnh cũ đã bị thay nội dung sẽ bị đọc nhầm file mới.
 - **`cluster` hiện chỉ chạy lần đầu**: nếu đã có nhãn hoặc mặt/cụm bị bỏ qua thì từ chối, vì gán tăng dần thuộc 5.3.
 - Thử thật qua CLI (`scan`, `detect`, `cluster`, `debug contact-sheet`) trên ảnh mẫu insightface thu nhỏ 4 cỡ: 24 mặt, 6 cụm × 4 mặt, 0 mặt lẻ, 0 lỗi.
+
+## 2026-11-17 — giao diện (UI_PLAN: G1, G0, G2, G3, G4)
+
+- **Migration v2:** thêm `faces.detached` (mặt đã tách khỏi nhóm thì không tự gán lại về nhóm có nhãn) và bảng `ops_log` (nhật ký thao tác gắn nhãn, tối đa 100 dòng, để hoàn tác).
+- **`cluster_run` thay `cluster_first_run`** (giữ tên cũ làm bí danh): luôn gán tăng dần, lần đầu thì không có nhóm tham chiếu nên chỉ chạy DBSCAN. Nhóm đã *bỏ qua* cũng là nhóm tham chiếu để mặt giống người đó (thợ ảnh, người lạ) tự vào đó thay vì thành nhóm mới. Mặt gán tay và nhóm có nhãn không bao giờ bị đụng; nhóm chưa nhãn được gom lại từ đầu (như đặc tả mục 5).
+- **Gộp nhãn giữ sổ xuất:** `merge_labels` chuyển dòng `exports` sang nhãn đích (`UPDATE OR IGNORE`); dòng trùng SHA-256 còn lại thành "nhãn mồ côi" và `reconcile_exports` xóa bản copy thừa trên đĩa (chỉ khi size và mtime còn khớp sổ). Đổi tên nhãn: file đã xuất được chuyển sang folder mới, folder cũ rỗng thì xóa; file người dùng tự chép vào không bị đụng. `--dry-run` chưa tính phần này.
+- **Kiểm tra dung lượng:** cần `tổng byte sẽ copy + 64 MB` còn trống (`shutil.disk_usage` trên thư mục tồn tại gần nhất của output); thiếu thì `FacesortError` trước khi copy.
+- **Máy chủ:** một `JobRunner` (1 tác vụ một lúc, giữ `ProjectLock` trong thread); ghi dữ liệu dán nhãn bị chặn (409) khi đang có tác vụ nền. Chọn folder bằng tkinter chạy trong tiến trình con (`python -c`) để không treo máy chủ. `Host` phải là `127.0.0.1` hoặc `localhost`, `Origin` (nếu có) cũng vậy.
+- **Mặt đại diện:** `sim_tâm + 0.3·det_score + 0.2·min(cạnh/200, 1)`; 5 mặt nhỏ chọn bằng farthest-point. **Gợi ý gộp:** khoảng cách cosine giữa tâm hai nhóm ≤ 0.6 (tạm thời, chưa tinh chỉnh; chờ task 3.8).
+- **Frontend:** HTML/CSS/JS thuần, dựng DOM bằng `textContent` (không `innerHTML`) để tên nhãn/đường dẫn không chèn được mã. Thử với model thật trên ảnh mẫu insightface qua trình duyệt: Scan → Labeling (Enter, gợi ý, tách mặt, xem ảnh, Ctrl+Z) → Export chạy đúng; màn hẹp (375 px) không tràn.
+- Thông báo lỗi ảnh hỏng rút gọn thành "File ảnh hỏng hoặc không đọc được." (chi tiết vào log).
+- `run.bat` gọi `python.exe -m pip` / `-m facesort` để tránh `.exe` bị Application Control chặn. **Chưa chạy thử** (viết xong, chưa thử trên máy sạch).
+- Bỏ nhóm phụ thuộc `ui` (đã gộp fastapi, uvicorn vào phụ thuộc mặc định). Thêm `facesort/__main__.py` để `python -m facesort` chạy được.
